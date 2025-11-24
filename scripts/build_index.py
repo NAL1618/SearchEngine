@@ -1,4 +1,19 @@
-import re, json, math, os, gzip, glob, collections
+import re, json, os, gzip, collections
+
+
+def simhash(tokens, bits=64):
+    """Compute a simple SimHash fingerprint for a multiset of tokens."""
+    v = [0] * bits
+    for t, freq in collections.Counter(tokens).items():
+        h = hash(t)
+        for i in range(bits):
+            bit = (h >> i) & 1
+            v[i] += freq if bit else -freq
+    fingerprint = 0
+    for i, weight in enumerate(v):
+        if weight >= 0:
+            fingerprint |= (1 << i)
+    return fingerprint
 
 # this part sets the paths for corpus input and index output
 CORPUS = "artifacts/corpus.jsonl"
@@ -14,10 +29,11 @@ def tokenize(text):
 os.makedirs(IDXDIR, exist_ok=True)
 
 # this part initializes data structures
-postings = {}     
-doclen = {}       
-titles = {}      
-urls = {}         
+postings = {}
+doclen = {}
+titles = {}
+urls = {}
+simhash_bands = collections.defaultdict(list)       
 N = 0
 
 # this part processes each document
@@ -41,6 +57,13 @@ with open(CORPUS, encoding="utf-8") as f:
         tf = collections.Counter(toks)
         for term, freq in tf.items():
             postings.setdefault(term, []).append((did, freq))
+        
+         # compute simhash bands for LSH-based candidate retrieval
+        sig = simhash(toks)
+        band_size = 16
+        for band in range(0, 64, band_size):
+            bucket = (band // band_size, (sig >> band) & ((1 << band_size) - 1))
+            simhash_bands[bucket].append(did)
 
 # calculate the average document length
 avgdl = sum(doclen.values())/max(1,len(doclen))
@@ -57,7 +80,10 @@ with gzip.open(f"{IDXDIR}/titles.json.gz","wt",encoding="utf-8") as g:
 #saves document URLs to a compressed file
 with gzip.open(f"{IDXDIR}/urls.json.gz","wt",encoding="utf-8") as g:
     json.dump(urls, g)
-
+# Saves simhash buckets to support approximate candidate search.
+# Each bucket key is stored as "band:value" to keep JSON small.
+with gzip.open(f"{IDXDIR}/simhash_bands.json.gz","wt",encoding="utf-8") as g:
+    json.dump({f"{b}:{v}": dids for (b, v), dids in simhash_bands.items()}, g)
 # this part sorts all terms alphabetically
 items = sorted(postings.items(), key=lambda x: x[0])
 # this part sets up variables for splitting postings into shards

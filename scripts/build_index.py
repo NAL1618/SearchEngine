@@ -1,106 +1,103 @@
-import re, json, os, gzip, collections
+import re
+import json
+import os
+import collections
+import shutil
 
-
-def simhash(tokens, bits=64):
-    """Compute a simple SimHash fingerprint for a multiset of tokens."""
-    v = [0] * bits
-    for t, freq in collections.Counter(tokens).items():
-        h = hash(t)
-        for i in range(bits):
-            bit = (h >> i) & 1
-            v[i] += freq if bit else -freq
-    fingerprint = 0
-    for i, weight in enumerate(v):
-        if weight >= 0:
-            fingerprint |= (1 << i)
-    return fingerprint
-
-# this part sets the paths for corpus input and index output
 CORPUS = "artifacts/corpus.jsonl"
 IDXDIR = "artifacts/index"
-# this part creates the pattern for tokenizing
-tok_re = re.compile(r"[A-Za-z0-9]+")
 
-# this part defines the tokenization function
-def tokenize(text):
-    return [t.lower() for t in tok_re.findall(text)]
+TOK_RE = re.compile(r"[A-Za-z0-9]+")
 
-#index directory
-os.makedirs(IDXDIR, exist_ok=True)
 
-# this part initializes data structures
-postings = {}
+def tokenize(text: str):
+    return [t.lower() for t in TOK_RE.findall(text)]
+
+
+if os.path.isdir(IDXDIR):
+    existing = os.listdir(IDXDIR)
+    if existing:
+        print(f"Clearing existing index directory {IDXDIR} ({len(existing)} files)...")
+        for name in existing:
+            path = os.path.join(IDXDIR, name)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+else:
+    os.makedirs(IDXDIR, exist_ok=True)
+
+postings = {}   # term -> [(did, tf), ...]
 doclen = {}
 titles = {}
 urls = {}
-simhash_bands = collections.defaultdict(list)       
+snippets = {}
 N = 0
 
-# this part processes each document
 with open(CORPUS, encoding="utf-8") as f:
     for line in f:
         obj = json.loads(line)
-        # this part extracts document ID and combines title and text
+
         did = obj["id"]
-        text = (obj.get("title","") + " " + obj.get("text",""))
-        # this part tokenizes the document text
-        toks = tokenize(text)
+        title = obj.get("title", "")
+        text = obj.get("text", "")
+
+        toks = tokenize(title + " " + text)
         if not toks:
             continue
-        #increment
+
         N += 1
-        # this part stores document metadata
-        titles[did] = obj.get("title","")
-        urls[did]   = obj.get("url","")
+        titles[did] = title
+        urls[did] = obj.get("url", "")
         doclen[did] = len(toks)
-        # this part counts term frequencies in the document
+
+        # short snippet: first 500 chars of article text, single line
+        snippet_text = text.replace("\n", " ").strip()
+        snippets[did] = snippet_text[:500]
+
         tf = collections.Counter(toks)
         for term, freq in tf.items():
             postings.setdefault(term, []).append((did, freq))
-        
-         # compute simhash bands for LSH-based candidate retrieval
-        sig = simhash(toks)
-        band_size = 16
-        for band in range(0, 64, band_size):
-            bucket = (band // band_size, (sig >> band) & ((1 << band_size) - 1))
-            simhash_bands[bucket].append(did)
 
-# calculate the average document length
-avgdl = sum(doclen.values())/max(1,len(doclen))
+avgdl = sum(doclen.values()) / max(1, len(doclen))
 
-#saves metadata to a compressed file
-with gzip.open(f"{IDXDIR}/meta.json.gz","wt",encoding="utf-8") as g:
-    json.dump({"N":N,"avgdl":avgdl}, g)
-#saves document lengths to a compressed file
-with gzip.open(f"{IDXDIR}/doclen.json.gz","wt",encoding="utf-8") as g:
+with open(os.path.join(IDXDIR, "meta.json"), "w", encoding="utf-8") as g:
+    json.dump({"N": N, "avgdl": avgdl}, g)
+
+with open(os.path.join(IDXDIR, "doclen.json"), "w", encoding="utf-8") as g:
     json.dump(doclen, g)
-#saves document titles to a compressed file
-with gzip.open(f"{IDXDIR}/titles.json.gz","wt",encoding="utf-8") as g:
+
+with open(os.path.join(IDXDIR, "titles.json"), "w", encoding="utf-8") as g:
     json.dump(titles, g)
-#saves document URLs to a compressed file
-with gzip.open(f"{IDXDIR}/urls.json.gz","wt",encoding="utf-8") as g:
+
+with open(os.path.join(IDXDIR, "urls.json"), "w", encoding="utf-8") as g:
     json.dump(urls, g)
-# Saves simhash buckets to support approximate candidate search.
-# Each bucket key is stored as "band:value" to keep JSON small.
-with gzip.open(f"{IDXDIR}/simhash_bands.json.gz","wt",encoding="utf-8") as g:
-    json.dump({f"{b}:{v}": dids for (b, v), dids in simhash_bands.items()}, g)
-# this part sorts all terms alphabetically
+
+with open(os.path.join(IDXDIR, "snippets.json"), "w", encoding="utf-8") as g:
+    json.dump(snippets, g)
+
+# champion-limited postings
+CHAMP_K = 50
+for term, plist in postings.items():
+    plist.sort(key=lambda x: x[1], reverse=True)
+    postings[term] = plist[:CHAMP_K]
+
 items = sorted(postings.items(), key=lambda x: x[0])
-# this part sets up variables for splitting postings into shards
-shard, buf, cap = 0, {}, 200000
-# this part processes each term and creates sharded posting files
-for i,(term, plist) in enumerate(items):
-    # this part adds the term with its document frequency and postings to the buffer
+
+shard = 0
+buf = {}
+cap = 200_000
+
+for i, (term, plist) in enumerate(items):
     buf[term] = {"df": len(plist), "postings": plist}
-    # this part writes the buffer to a shard file when it reaches capacity
-    if (i+1)%cap==0:
-        with gzip.open(f"{IDXDIR}/pp_{shard:03d}.json.gz","wt",encoding="utf-8") as g:
+    if (i + 1) % cap == 0:
+        with open(os.path.join(IDXDIR, f"pp_{shard:03d}.json"), "w", encoding="utf-8") as g:
             json.dump(buf, g)
-        buf, shard = {}, shard+1
-# this part writes any remaining terms to the final shard
+        buf = {}
+        shard += 1
+
 if buf:
-    with gzip.open(f"{IDXDIR}/pp_{shard:03d}.json.gz","wt",encoding="utf-8") as g:
+    with open(os.path.join(IDXDIR, f"pp_{shard:03d}.json"), "w", encoding="utf-8") as g:
         json.dump(buf, g)
 
-# this part prints a summary of the indexing process
-print(f"Indexed docs: {N}, avgdl: {avgdl:.2f}, shards: {shard+1}")
+print(f"Indexed docs: {N}, avgdl: {avgdl:.2f}, shards: {shard + 1}, champions per term: {CHAMP_K}")

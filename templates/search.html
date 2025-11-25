@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Mini Search Engine</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #fafafa;
+      }
+      .header {
+        padding: 20px;
+        text-align: center;
+        background: #202124;
+        color: #fff;
+      }
+      .container {
+        max-width: 800px;
+        margin: 30px auto;
+        padding: 0 16px;
+      }
+      .search-box {
+        display: flex;
+        gap: 8px;
+      }
+      .search-box input[type="text"] {
+        flex: 1;
+        padding: 10px 12px;
+        font-size: 16px;
+        border-radius: 24px;
+        border: 1px solid #ccc;
+        outline: none;
+      }
+      .search-box button {
+        padding: 10px 18px;
+        font-size: 14px;
+        border-radius: 24px;
+        border: none;
+        background: #1a73e8;
+        color: #fff;
+        cursor: pointer;
+      }
+      .search-box button:hover {
+        background: #1559b3;
+      }
+      .answer-box {
+        margin-top: 20px;
+        padding: 12px 14px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        border-left: 4px solid #1a73e8;
+      }
+      .answer-title {
+        font-size: 14px;
+        font-weight: bold;
+        margin-bottom: 6px;
+        color: #555;
+      }
+      .answer-text {
+        font-size: 14px;
+        color: #222;
+      }
+      .results {
+        margin-top: 24px;
+      }
+      .result-item {
+        margin-bottom: 18px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #eee;
+      }
+      .result-title {
+        font-size: 18px;
+        color: #1a0dab;
+        margin: 0 0 4px;
+      }
+      .result-url {
+        font-size: 13px;
+        color: #006621;
+        margin-bottom: 4px;
+      }
+      .result-score {
+        font-size: 12px;
+        color: #777;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Mini Search Engine</h1>
+    </div>
+
+    <div class="container">
+      <form class="search-box" method="get" action="/">
+        <input
+          type="text"
+          name="q"
+          placeholder="Type a query..."
+          value="{{ query | e }}"
+          autofocus
+        />
+        <button type="submit">Search</button>
+      </form>
+
+      {% if query %}
+        {% if answer %}
+          <div class="answer-box">
+            <div class="answer-title">Answer (from top result)</div>
+            <div class="answer-text">
+              {{ answer }}
+            </div>
+          </div>
+        {% endif %}
+
+        {% if results %}
+          <div class="results">
+            <p>Showing {{ results|length }} results for "<strong>{{ query | e }}</strong>":</p>
+            {% for r in results %}
+              <div class="result-item">
+                <a class="result-title" href="{{ r.url }}" target="_blank">
+                  {{ r.title or "(no title)" }}
+                </a>
+                <div class="result-url">{{ r.url }}</div>
+                <div class="result-score">Score: {{ r.score }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p>No results found for "<strong>{{ query | e }}</strong>".</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </body>
+</html>

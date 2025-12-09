@@ -27,7 +27,7 @@ if os.path.isdir(IDXDIR):
 else:
     os.makedirs(IDXDIR, exist_ok=True)
 
-postings = {}   # term -> [(did, tf), ...]
+postings = {} 
 doclen = {}
 titles = {}
 urls = {}
@@ -51,7 +51,6 @@ with open(CORPUS, encoding="utf-8") as f:
         urls[did] = obj.get("url", "")
         doclen[did] = len(toks)
 
-        # short snippet: first 500 chars of article text, single line
         snippet_text = text.replace("\n", " ").strip()
         snippets[did] = snippet_text[:500]
 
@@ -76,7 +75,6 @@ with open(os.path.join(IDXDIR, "urls.json"), "w", encoding="utf-8") as g:
 with open(os.path.join(IDXDIR, "snippets.json"), "w", encoding="utf-8") as g:
     json.dump(snippets, g)
 
-# champion-limited postings
 CHAMP_K = 50
 for term, plist in postings.items():
     plist.sort(key=lambda x: x[1], reverse=True)

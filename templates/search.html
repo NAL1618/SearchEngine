@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Mini Search Engine</title>
+    <title>Noogle</title>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -11,11 +11,37 @@
         background: #fafafa;
       }
       .header {
-        padding: 20px;
+        padding: 24px 20px;
         text-align: center;
         background: #202124;
         color: #fff;
       }
+      .logo {
+        margin: 0;
+        font-size: 0;           
+        font-weight: 700;
+        letter-spacing: 0;
+        line-height: 1;
+        text-shadow:
+          0 2px 4px rgba(0,0,0,0.35),
+          0 0 6px rgba(255,255,255,0.1);
+      }
+      .logo span {
+        display: inline-block;
+        font-size: 56px;         
+        transform: translateY(1px);
+        margin-right: 4px;        
+      }
+      .logo span:last-child {
+        margin-right: 0;
+      }
+      .logo .n-blue   { color: #4285f4; }
+      .logo .o-red    { color: #ea4335; }
+      .logo .o-yellow { color: #fbbc05; }
+      .logo .g-blue   { color: #4285f4; }
+      .logo .l-green  { color: #34a853; }
+      .logo .e-red    { color: #ea4335; }
+
       .container {
         max-width: 800px;
         margin: 30px auto;
@@ -45,24 +71,21 @@
       .search-box button:hover {
         background: #1559b3;
       }
+
       .answer-box {
         margin-top: 20px;
-        padding: 12px 14px;
-        background: #fff;
-        border-radius: 8px;
+        padding: 14px 18px;
+        background: #ffffff;
+        border-radius: 10px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.12);
         border-left: 4px solid #1a73e8;
       }
-      .answer-title {
-        font-size: 14px;
-        font-weight: bold;
-        margin-bottom: 6px;
-        color: #555;
-      }
       .answer-text {
-        font-size: 14px;
+        font-size: 17px;
+        line-height: 1.5;
         color: #222;
       }
+
       .results {
         margin-top: 24px;
       }
@@ -89,7 +112,14 @@
   </head>
   <body>
     <div class="header">
-      <h1>Mini Search Engine</h1>
+      <h1 class="logo">
+        <span class="n-blue">N</span>
+        <span class="o-red">o</span>
+        <span class="o-yellow">o</span>
+        <span class="g-blue">g</span>
+        <span class="l-green">l</span>
+        <span class="e-red">e</span>
+      </h1>
     </div>
 
     <div class="container">
@@ -107,7 +137,6 @@
       {% if query %}
         {% if answer %}
           <div class="answer-box">
-            <div class="answer-title">Answer (from top result)</div>
             <div class="answer-text">
               {{ answer }}
             </div>

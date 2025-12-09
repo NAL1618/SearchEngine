@@ -1,11 +1,29 @@
-# scripts/ui.py
-
 from flask import Flask, render_template, request
+from google import genai
 from scripts.search_engine import load_index, run_search
 
 app = Flask(__name__)
+client = genai.Client()
 
-meta, doclen, titles, urls, snippets, shard_paths = load_index()
+
+meta, doclen, titles, urls, shard_paths = load_index()
+
+
+def get_ai_answer(query: str) -> str:
+    prompt = (
+        "Explain the following in 50 words or less using simple, clear language. "
+        "Do not mention that you are an AI.\n\n"
+        f"{query}"
+    )
+    try:
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash",  
+            contents=prompt,
+        )
+        return (resp.text or "").strip()
+    except Exception as e:
+        print("Gemini error:", e)
+        return "AI answer unavailable right now. Here are some relevant links instead:"
 
 
 @app.route("/", methods=["GET"])
@@ -17,13 +35,13 @@ def home():
 
     if query:
         searching = True
-        answer, results = run_search(
+        answer = get_ai_answer(query)
+        results = run_search(
             query=query,
             meta=meta,
             doclen=doclen,
             titles=titles,
             urls=urls,
-            snippets=snippets,
             shard_paths=shard_paths,
             topk=10,
         )
